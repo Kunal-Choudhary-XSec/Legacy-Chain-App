@@ -1,32 +1,10 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
-import {
-  StellarWalletsKit,
-  Networks,
-} from "@creit.tech/stellar-wallets-kit";
-import { FREIGHTER_ID } from "@creit.tech/stellar-wallets-kit/modules/freighter";
+import freighter from "@stellar/freighter-api";
 import { useWalletStore } from "@/stores/walletStore";
 import { getServer } from "@/lib/stellar";
 import { NETWORK_PASSPHRASE } from "@/lib/constants";
-
-const KIT_NETWORKS: Record<string, Networks> = {
-  "Test SDF Network ; September 2015": Networks.TESTNET,
-  "Public Global Stellar Network ; September 2015": Networks.PUBLIC,
-};
-
-let initialized = false;
-
-function ensureKit(): void {
-  if (!initialized) {
-    StellarWalletsKit.init({
-      modules: [],
-      network: KIT_NETWORKS[NETWORK_PASSPHRASE] || Networks.TESTNET,
-      selectedWalletId: FREIGHTER_ID,
-    });
-    initialized = true;
-  }
-}
 
 export function useWallet() {
   const store = useWalletStore();
@@ -49,15 +27,32 @@ export function useWallet() {
   const connect = useCallback(async () => {
     store.setConnecting(true);
     try {
-      ensureKit();
-      // Open the modal and wait for wallet selection
-      const { address } = await StellarWalletsKit.authModal();
-      const pubKey = address;
+      // Check if Freighter is installed
+      const { isConnected } = await freighter.isConnected();
+      if (!isConnected) {
+        throw new Error(
+          "Freighter wallet not detected. Please install the Freighter browser extension."
+        );
+      }
 
-      store.setAddress(pubKey);
+      // Request access and get the address
+      const { address, error } = await freighter.requestAccess();
+      if (error || !address) {
+        throw new Error(error?.message || "Failed to connect to Freighter");
+      }
+
+      // Verify the network matches
+      const { networkPassphrase } = await freighter.getNetwork();
+      if (networkPassphrase !== NETWORK_PASSPHRASE) {
+        console.warn(
+          `Network mismatch: Freighter is on "${networkPassphrase}", app expects "${NETWORK_PASSPHRASE}"`
+        );
+      }
+
+      store.setAddress(address);
       store.setConnected(true);
       store.setNetwork("testnet");
-      await getBalance(pubKey);
+      await getBalance(address);
     } catch (err) {
       console.error("Connection error:", err);
       throw err;
@@ -67,19 +62,20 @@ export function useWallet() {
   }, [store, getBalance]);
 
   const disconnect = useCallback(() => {
-    StellarWalletsKit.disconnect();
     store.reset();
   }, [store]);
 
   const signTransaction = useCallback(
     async (xdr: string): Promise<string> => {
-      const { signedTxXdr } = await StellarWalletsKit.signTransaction(xdr, {
+      const { signedTxXdr, error } = await freighter.signTransaction(xdr, {
         networkPassphrase: NETWORK_PASSPHRASE,
-        address: store.address,
       });
+      if (error || !signedTxXdr) {
+        throw new Error(error?.message || "Failed to sign transaction");
+      }
       return signedTxXdr;
     },
-    [store.address]
+    []
   );
 
   useEffect(() => {
