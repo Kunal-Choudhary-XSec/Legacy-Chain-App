@@ -79,7 +79,7 @@ bun install
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and connect your wallet.
+Open [https://preview-9001-morphvm-rz1ujtsh.http.cloud.morph.so/](https://preview-9001-morphvm-rz1ujtsh.http.cloud.morph.so/) and connect your wallet.
 
 ### Deploy the Contract
 
